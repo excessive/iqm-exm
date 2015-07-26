@@ -119,7 +119,7 @@ function iqm.load(file)
 	end
 	table.sort(found_names)
 	local title = "iqm_vertex_" .. table.concat(found_names, "_")
-	print(title)
+	-- print(title)
 
 	local type = iqm.lookup[title]
 	if not type then
@@ -218,6 +218,7 @@ function iqm.load(file)
 			material = ffi.string(text+mesh.material),
 			name     = ffi.string(text+mesh.name)
 		}
+		-- print(add.material, add.name)
 		add.last = add.first + add.count
 		table.insert(objects, add)
 	end
