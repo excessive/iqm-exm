@@ -119,7 +119,6 @@ function iqm.load(file)
 	end
 	table.sort(found_names)
 	local title = "iqm_vertex_" .. table.concat(found_names, "_")
-	print(title)
 
 	local type = iqm.lookup[title]
 	if not type then
@@ -136,12 +135,22 @@ function iqm.load(file)
 
 	local correct_srgb = select(3, love.window.getMode()).srgb
 
+	-- TODO: Compute XY + spherical radiuses
+	local computed_bbox = { min = {}, max = {} }
+
 	-- Interleave vertex data
 	for _, va in ipairs(found_types) do
 		local ptr = read_ptr(data, va.format, va.offset)
 		for i = 0, header.num_vertexes-1 do
 			for j = 0, va.size-1 do
 				vertices[i][va.type][j] = ptr[i*va.size+j]
+			end
+			if va.type == "position" and header.num_frames == 0 then
+				local v = vertices[i][va.type]
+				for i = 1, 3 do
+					computed_bbox.min[i] = math.min(computed_bbox.min[i] or v[i-1], v[i-1])
+					computed_bbox.max[i] = math.max(computed_bbox.max[i] or v[i-1], v[i-1])
+				end
 			end
 			if va.type == "color" and correct_srgb then
 				local v = vertices[i][va.type]
@@ -201,6 +210,26 @@ function iqm.load(file)
 
 	--]]
 
+	local objects = {}
+	objects.bounds = {}
+
+	if header.num_frames > 0 then
+		local tmp_bounds = read_offset(
+			data,
+			"struct iqmbounds",
+			header.ofs_bounds,
+			header.num_frames
+		)
+		for i, bb in ipairs(bounds) do
+			table.insert(objects.bounds, {
+				min = { bbmins[0], bbmins[1], bbmins[2] },
+				max = { bbmaxs[0], bbmaxs[1], bbmaxs[2] }
+			})
+		end
+	else
+		table.insert(objects.bounds, computed_bbox)
+	end
+
 	-- Decode meshes
 	local meshes = read_offset(
 		data,
@@ -209,7 +238,6 @@ function iqm.load(file)
 		header.num_meshes
 	)
 
-	local objects = {}
 	objects.mesh = m
 	for i, mesh in ipairs(meshes) do
 		local add = {
