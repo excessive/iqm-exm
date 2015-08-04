@@ -6,12 +6,20 @@ local iqm = {}
 
 iqm.lookup = {}
 
-function iqm.load(file)
-	assert(love.filesystem.isFile(file))
+local function check_magic(magic)
+	return magic:sub(1,16) == "INTERQUAKEMODEL\0"
+end
 
-	-- Make sure it's a valid IQM file first
-	local magic = love.filesystem.read(file, 16)
-	assert(magic == "INTERQUAKEMODEL\0")
+-- `file` can be either a filename or IQM data (as long as the magic is intact)
+function iqm.load(file)
+	-- Check if we've been given IQM data instead of a filename.
+	local is_buffer = check_magic(file)
+
+	-- Make sure it's a valid IQM file
+	if not is_buffer then
+		assert(love.filesystem.isFile(file))
+		assert(check_magic(love.filesystem.read(file, 16)))
+	end
 
 	-- HACK: Workaround for a bug in LuaJIT's GC - we need to turn it off for the
 	-- rest of the function or we'll get a segfault shortly into these loops.
@@ -21,13 +29,21 @@ function iqm.load(file)
 	collectgarbage("stop")
 
 	-- Decode the header, it's got all the offsets
-	local iqm_header = ffi.typeof("struct iqmheader*")
-	local size   = ffi.sizeof("struct iqmheader")
-	local data   = love.filesystem.read(file)
-	local header = ffi.cast(iqm_header, data)[0]
+	local iqm_header  = ffi.typeof("struct iqmheader*")
+	local size        = ffi.sizeof("struct iqmheader")
+	local header_data
+	if is_buffer then
+		header_data = file
+	else
+		header_data = love.filesystem.read(file, size)
+	end
+	local header = ffi.cast(iqm_header, header_data)[0]
 
 	-- We only support IQM version 2
 	assert(header.version == 2)
+
+	-- Only read the amount of data declared by the header, just in case!
+	local data = is_buffer and file or love.filesystem.read(file, header.filesize)
 
 	local function read_offset(data, type, offset, num)
 		local decoded = {}
@@ -239,6 +255,7 @@ function iqm.load(file)
 		header.num_meshes
 	)
 
+	objects.has_anims = header.num_anims > 0
 	objects.mesh = m
 	for i, mesh in ipairs(meshes) do
 		local add = {
