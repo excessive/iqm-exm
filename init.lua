@@ -10,9 +10,7 @@ local function check_magic(magic)
 	return magic:sub(1,16) == "INTERQUAKEMODEL\0"
 end
 
--- `file` can be either a filename or IQM data (as long as the magic is intact)
-function iqm.load(file)
-	-- Check if we've been given IQM data instead of a filename.
+local function load_data(file)
 	local is_buffer = check_magic(file)
 
 	-- Make sure it's a valid IQM file
@@ -20,13 +18,6 @@ function iqm.load(file)
 		assert(love.filesystem.isFile(file))
 		assert(check_magic(love.filesystem.read(file, 16)))
 	end
-
-	-- HACK: Workaround for a bug in LuaJIT's GC - we need to turn it off for the
-	-- rest of the function or we'll get a segfault shortly into these loops.
-	--
-	-- I've got no idea why the GC thinks it can pull the rug out from under us,
-	-- but I sure as hell don't appreciate it. -ss
-	collectgarbage("stop")
 
 	-- Decode the header, it's got all the offsets
 	local iqm_header  = ffi.typeof("struct iqmheader*")
@@ -45,24 +36,57 @@ function iqm.load(file)
 	-- Only read the amount of data declared by the header, just in case!
 	local data = is_buffer and file or love.filesystem.read(file, header.filesize)
 
-	local function read_offset(data, type, offset, num)
-		local decoded = {}
-		local type_ptr = ffi.typeof(type.."*")
-		local size = ffi.sizeof(type)
-		local ptr = ffi.cast(type_ptr, data:sub(offset+1))
-		for i = 1, num do
-			table.insert(decoded, ptr[i-1])
-		end
-		return decoded
-	end
+	return header, data
+end
 
-	-- a bit simpler than read_offset, don't bother converting to a table.
-	local function read_ptr(data, type, offset)
-		local type_ptr = ffi.typeof(type.."*")
-		local size = ffi.sizeof(type)
-		local ptr = ffi.cast(type_ptr, data:sub(offset+1))
-		return ptr
+-- Read `num` element from `data` at `offset` and convert it to a table.
+local function read_offset(data, type, offset, num)
+	local decoded = {}
+	local type_ptr = ffi.typeof(type.."*")
+	local size = ffi.sizeof(type)
+	local ptr = ffi.cast(type_ptr, data:sub(offset+1))
+	for i = 1, num do
+		table.insert(decoded, ptr[i-1])
 	end
+	return decoded
+end
+
+-- a bit simpler than read_offset, as we don't bother converting to a table.
+local function read_ptr(data, type, offset)
+	local type_ptr = ffi.typeof(type.."*")
+	local size = ffi.sizeof(type)
+	local ptr = ffi.cast(type_ptr, data:sub(offset+1))
+	return ptr
+end
+
+-- Collect all text data in the file.
+-- Not needed for meshes because everything is byte offsets - but very
+-- useful for debugging.
+local function dump_strings(text)
+	local strings = {}
+	local advance = 1
+
+	-- header.num_text is the length of the text block in bytes.
+	repeat
+		local str = ffi.string(text + advance)
+		table.insert(strings, str)
+		advance = advance + str:len() + 1
+		print(str)
+	until advance >= header.num_text
+
+	return strings
+end
+
+-- `file` can be either a filename or IQM data (as long as the magic is intact)
+function iqm.load(file)
+	-- HACK: Workaround for a bug in LuaJIT's GC - we need to turn it off for the
+	-- rest of the function or we'll get a segfault shortly into these loops.
+	--
+	-- I've got no idea why the GC thinks it can pull the rug out from under us,
+	-- but I sure as hell don't appreciate it. Do NOT restart until the end. -ss
+	collectgarbage("stop")
+
+	local header, data = load_data(file)
 
 	-- Decode the vertex arrays
 	local vertex_arrays = read_offset(
@@ -136,6 +160,7 @@ function iqm.load(file)
 	table.sort(found_names)
 	local title = "iqm_vertex_" .. table.concat(found_names, "_")
 
+	-- If we've already got a struct of this type, reuse it.
 	local type = iqm.lookup[title]
 	if not type then
 		local def = string.format("struct %s {\n\t%s;\n};", title, table.concat(found, ";\n\t"))
@@ -161,7 +186,7 @@ function iqm.load(file)
 			for j = 0, va.size-1 do
 				vertices[i][va.type][j] = ptr[i*va.size+j]
 			end
-			if va.type == "position" and header.num_frames == 0 then
+			if va.type == "position" then
 				local v = vertices[i][va.type]
 				for i = 1, 3 do
 					computed_bbox.min[i] = math.min(computed_bbox.min[i] or v[i-1], v[i-1])
@@ -170,8 +195,9 @@ function iqm.load(file)
 			end
 			if va.type == "color" and correct_srgb then
 				local v = vertices[i][va.type]
-				local r, g, b = love.math.gammaToLinear(v[0] / 255, v[1] / 255, v[2] / 255)
-				v[0], v[1], v[2] = r*255, g*255, b*255
+				-- TODO: Remove this correction once slime merges the sRGB changes.
+				local r, g, b = love.math.gammaToLinear(v[0], v[1], v[2])
+				v[0], v[1], v[2] = r, g, b
 			end
 		end
 	end
@@ -194,8 +220,6 @@ function iqm.load(file)
 		table.insert(indices, triangle.vertex[1] + 1)
 	end
 
-	collectgarbage("restart")
-
 	local layout = {}
 	for i, va in ipairs(found_types) do
 		layout[i] = { va.love_type, va.format, va.size }
@@ -210,28 +234,13 @@ function iqm.load(file)
 		"char",
 		header.ofs_text
 	)
-	--[[
-	-- Collect all text data in the file.
-	-- Not needed for meshes because everything is byte offsets - but very
-	-- useful for debugging.
-	local strings = {}
-	local advance = 1
-
-	-- header.num_text is the length of the text block in bytes.
-	repeat
-		local str = ffi.string(text + advance)
-		table.insert(strings, str)
-		advance = advance + str:len() + 1
-		print(str)
-	until advance >= header.num_text
-
-	--]]
 
 	local objects = {}
 	objects.bounds = {}
+	objects.bounds.base = computed_bbox
 
-	if header.num_frames > 0 then
-		local tmp_bounds = read_offset(
+	if header.ofs_bounds > 0 then
+		local bounds = read_offset(
 			data,
 			"struct iqmbounds",
 			header.ofs_bounds,
@@ -239,12 +248,10 @@ function iqm.load(file)
 		)
 		for i, bb in ipairs(bounds) do
 			table.insert(objects.bounds, {
-				min = { bbmins[0], bbmins[1], bbmins[2] },
-				max = { bbmaxs[0], bbmaxs[1], bbmaxs[2] }
+				min = { bb.bbmins[0], bb.bbmins[1], bb.bbmins[2] },
+				max = { bb.bbmaxs[0], bb.bbmaxs[1], bb.bbmaxs[2] }
 			})
 		end
-	else
-		table.insert(objects.bounds, computed_bbox)
 	end
 
 	-- Decode meshes
@@ -255,7 +262,8 @@ function iqm.load(file)
 		header.num_meshes
 	)
 
-	objects.has_anims = header.num_anims > 0
+	objects.has_joints = header.ofs_joints > 0
+	objects.has_anims = header.ofs_anims > 0
 	objects.mesh = m
 	for i, mesh in ipairs(meshes) do
 		local add = {
@@ -268,7 +276,96 @@ function iqm.load(file)
 		table.insert(objects, add)
 	end
 
+	collectgarbage("restart")
+
 	return objects
+end
+
+function iqm.load_anims(file)
+	-- Require CPML here because loading the mesh does not depend on it.
+	local cpml = require "cpml"
+
+	-- See the comment in iqm.load. Do *NOT* remove. -ss
+	collectgarbage("stop")
+	local header, data = load_data(file)
+
+	-- Decode mesh/material names.
+	local text = read_ptr(
+		data,
+		"char",
+		header.ofs_text
+	)
+
+	local anims = {}
+
+	if header.ofs_joints > 0 then
+		local skeleton     = {}
+		local joints       = read_offset(data, "struct iqmjoint", header.ofs_joints, header.num_joints)
+		for i, joint in ipairs(joints) do
+			joint.parent = joint.parent + 1
+			local bone = {
+				parent   = joint.parent,
+				name     = ffi.string(text+joint.name),
+				position = cpml.vec3(joint.translate[0], joint.translate[1], joint.translate[2]),
+				rotation = cpml.quat(joint.rotate[0], joint.rotate[1], joint.rotate[2], joint.rotate[3]),
+				scale    = cpml.vec3(joint.scale[0], joint.scale[1], joint.scale[2])
+			}
+			skeleton[i], skeleton[bone.name] = bone, bone
+		end
+		anims.skeleton = skeleton
+	end
+
+	if header.ofs_anims > 0 then
+		local animdata = read_offset(data, "struct iqmanim", header.ofs_anims, header.num_anims)
+		for i, anim in ipairs(animdata) do
+			anim.first_frame = anim.first_frame + 1
+			local a = {
+				name      = ffi.string(text+anim.name),
+				first     = anim.first_frame,
+				last      = anim.first_frame+anim.num_frames,
+				framerate = anim.framerate,
+				loop      = bit.band(anim.flags, c.IQM_LOOP) == c.IQM_LOOP
+			}
+
+			anims[i], anims[a.name] = a, a
+		end
+	end
+
+	if header.ofs_poses > 0 then
+		local poses = read_offset(data, "struct iqmpose", header.ofs_poses, header.num_poses)
+		print(string.format("Poses: %d", #poses))
+
+		local framedata = read_ptr(data, "unsigned short", header.ofs_frames)
+		local function readv(p, i, mask)
+			-- I can see your pointers from here~ o///o
+			local channeldata = framedata[0]
+			framedata = framedata + 1
+			local v = p.channeloffset[i]
+			if bit.band(p.channelmask, mask) > 0 then
+				v = v + channeldata * p.channelscale[i]
+			end
+			return v
+		end
+
+		for i = 0, header.num_frames do
+			local frame = {}
+			for j, p in ipairs(poses) do
+				-- This code is in touch with its sensitive side, please leave it be.
+				local v = {}
+				for i = 0, 9 do
+					v[i+1] = readv(p, i, bit.lshift(1, i))
+				end
+				table.insert(frame, {
+					translate = cpml.vec3(v[1], v[2], v[3]),
+					rotate    = cpml.quat(v[4], v[5], v[6], v[7]),
+					scale     = cpml.vec3(v[8], v[9], v[10])
+				})
+			end
+		end
+	end
+
+	collectgarbage("restart")
+	return anims
 end
 
 return iqm
