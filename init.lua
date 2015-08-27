@@ -1,6 +1,6 @@
 local base = (...):gsub('%.init$', '') .. "."
-local c = require(base .. "iqm-ffi")
-local ffi = require "ffi"
+local c    = require(base .. "iqm-ffi")
+local ffi  = require "ffi"
 
 local iqm = {}
 
@@ -77,7 +77,7 @@ local function dump_strings(text)
 	return strings
 end
 
--- `file` can be either a filename or IQM data (as long as the magic is intact)
+-- 'file' can be either a filename or IQM data (as long as the magic is intact)
 function iqm.load(file)
 	-- HACK: Workaround for a bug in LuaJIT's GC - we need to turn it off for the
 	-- rest of the function or we'll get a segfault shortly into these loops.
@@ -174,8 +174,6 @@ function iqm.load(file)
 	local filedata = love.filesystem.newFileData(("\0"):rep(header.num_vertexes * ffi.sizeof(type)), "dummy")
 	local vertices = ffi.cast("struct " .. title .. "*", filedata:getPointer())
 
-	local correct_srgb = select(3, love.window.getMode()).srgb
-
 	-- TODO: Compute XY + spherical radiuses
 	local computed_bbox = { min = {}, max = {} }
 
@@ -186,18 +184,16 @@ function iqm.load(file)
 			for j = 0, va.size-1 do
 				vertices[i][va.type][j] = ptr[i*va.size+j]
 			end
+			-- if va.type == "weight" then
+			-- 	local v = vertices[i][va.type]
+			-- 	print(v[0], v[1], v[2], v[3])
+			-- end
 			if va.type == "position" then
 				local v = vertices[i][va.type]
 				for i = 1, 3 do
 					computed_bbox.min[i] = math.min(computed_bbox.min[i] or v[i-1], v[i-1])
 					computed_bbox.max[i] = math.max(computed_bbox.max[i] or v[i-1], v[i-1])
 				end
-			end
-			if va.type == "color" and correct_srgb then
-				local v = vertices[i][va.type]
-				-- TODO: Remove this correction once slime merges the sRGB changes.
-				local r, g, b = love.math.gammaToLinear(v[0], v[1], v[2])
-				v[0], v[1], v[2] = r, g, b
 			end
 		end
 	end
@@ -318,10 +314,9 @@ function iqm.load_anims(file)
 	if header.ofs_anims > 0 then
 		local animdata = read_offset(data, "struct iqmanim", header.ofs_anims, header.num_anims)
 		for i, anim in ipairs(animdata) do
-			anim.first_frame = anim.first_frame + 1
 			local a = {
 				name      = ffi.string(text+anim.name),
-				first     = anim.first_frame,
+				first     = anim.first_frame+1,
 				last      = anim.first_frame+anim.num_frames,
 				framerate = anim.framerate,
 				loop      = bit.band(anim.flags, c.IQM_LOOP) == c.IQM_LOOP
@@ -333,27 +328,26 @@ function iqm.load_anims(file)
 
 	if header.ofs_poses > 0 then
 		local poses = read_offset(data, "struct iqmpose", header.ofs_poses, header.num_poses)
-		print(string.format("Poses: %d", #poses))
-
 		local framedata = read_ptr(data, "unsigned short", header.ofs_frames)
+
 		local function readv(p, i, mask)
-			-- I can see your pointers from here~ o///o
-			local channeldata = framedata[0]
-			framedata = framedata + 1
 			local v = p.channeloffset[i]
 			if bit.band(p.channelmask, mask) > 0 then
-				v = v + channeldata * p.channelscale[i]
+				v = v + framedata[0] * p.channelscale[i]
+				-- I can see your pointers from here~ o///o
+				framedata = framedata + 1
 			end
 			return v
 		end
 
-		for i = 0, header.num_frames do
+		anims.frames = {}
+		for i = 1, header.num_frames do
 			local frame = {}
 			for j, p in ipairs(poses) do
 				-- This code is in touch with its sensitive side, please leave it be.
 				local v = {}
-				for i = 0, 9 do
-					v[i+1] = readv(p, i, bit.lshift(1, i))
+				for o = 0, 9 do
+					v[o+1] = readv(p, o, bit.lshift(1, o))
 				end
 				table.insert(frame, {
 					translate = cpml.vec3(v[1], v[2], v[3]),
@@ -361,6 +355,7 @@ function iqm.load_anims(file)
 					scale     = cpml.vec3(v[8], v[9], v[10])
 				})
 			end
+			table.insert(anims.frames, frame)
 		end
 	end
 

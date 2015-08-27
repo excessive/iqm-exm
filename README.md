@@ -9,15 +9,11 @@ Intended for use with [LÖVE3D](https://github.com/excessive/love3d), but does n
 require "iqm"
 
 -- load:
-local model = iqm.load "foo.iqm"
--- If you've got animation data in the file (or any other) you can load it like so:
-local anims = model.has_anims and iqm.load_anims "foo.iqm"
--- Note: The data will be loaded, but things like the bind pose and bone matrices will not be computed for you.
--- Utility functions (or another library for this) may be added later.
+local model = iqm.load("foo.iqm")
 
--- Make sure to enable mipmaps (and sRGB if you're using it, which you should be).
+-- Make sure to enable mipmaps
 model.textures = {
-	Material1 = love.graphics.newImage("foo.png", { srgb = true, mipmaps = true })
+	Material1 = love.graphics.newImage("foo.png", { mipmaps = true })
 }
 
 -- Set filtering to 16x anisotropic.
@@ -36,3 +32,6 @@ for _, buffer in ipairs(model) do
 	love.graphics.draw(model.mesh)
 end
 ```
+
+## TODO
+* Animation support. This will add a dependency on CPML, for sure.
