@@ -33,5 +33,3 @@ for _, buffer in ipairs(model) do
 end
 ```
 
-## TODO
-* Animation support. This will add a dependency on CPML, for sure.
