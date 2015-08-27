@@ -1,4 +1,4 @@
-# IQM
+# Inter-Quake Model Loader
 
 Depends on LÖVE 0.10
 
