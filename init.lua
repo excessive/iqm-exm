@@ -2,7 +2,12 @@ local base = (...):gsub('%.init$', '') .. "."
 local c    = require(base .. "iqm-ffi")
 local ffi  = require "ffi"
 
-local iqm = {}
+local iqm = {
+	_LICENSE     = "Inter-Quake Model Loader is distributed under the terms of the MIT license. See LICENSE.md.",
+	_URL         = "https://github.com/excessive/iqm",
+	_VERSION     = "1.0.0",
+	_DESCRIPTION = "Load an IQM 3D model into LÖVE.",
+}
 
 iqm.lookup = {}
 

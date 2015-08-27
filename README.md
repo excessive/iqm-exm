@@ -32,4 +32,3 @@ for _, buffer in ipairs(model) do
 	love.graphics.draw(model.mesh)
 end
 ```
-
