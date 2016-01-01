@@ -6,7 +6,7 @@ Intended for use with [LÖVE3D](https://github.com/excessive/love3d), but does n
 
 ## Usage:
 ```lua
-require "iqm"
+local iqm = require "iqm"
 
 -- load:
 local model = iqm.load("foo.iqm")
