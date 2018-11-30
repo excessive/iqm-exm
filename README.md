@@ -1,6 +1,6 @@
 # Inter-Quake Model Loader
 
-Depends on LÖVE 0.10
+Depends on LÖVE 11
 
 Intended for use with [LÖVE3D](https://github.com/excessive/love3d), but does not depend on it (you can use this for 2D meshes, too!)
 
