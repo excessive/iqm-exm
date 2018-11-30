@@ -12,15 +12,16 @@ local iqm = {
 iqm.lookup = {}
 
 local function check_magic(magic)
-	return magic:sub(1,16) == "INTERQUAKEMODEL\0"
+	return string.sub(tostring(magic),1,16) == "INTERQUAKEMODEL\0"
 end
 
 local function load_data(file)
 	local is_buffer = check_magic(file)
 
+
 	-- Make sure it's a valid IQM file
 	if not is_buffer then
-		assert(love.filesystem.isFile(file))
+		assert(love.filesystem.getInfo(file, "file"), string.format("File %s not found", file))
 		assert(check_magic(love.filesystem.read(file, 16)))
 	end
 
@@ -49,7 +50,7 @@ local function read_offset(data, type, offset, num)
 	local decoded = {}
 	local type_ptr = ffi.typeof(type.."*")
 	local size = ffi.sizeof(type)
-	local ptr = ffi.cast(type_ptr, data:sub(offset+1))
+	local ptr = ffi.cast(type_ptr, string.sub(data, offset+1))
 	for i = 1, num do
 		table.insert(decoded, ptr[i-1])
 	end
@@ -60,7 +61,7 @@ end
 local function read_ptr(data, type, offset)
 	local type_ptr = ffi.typeof(type.."*")
 	local size = ffi.sizeof(type)
-	local ptr = ffi.cast(type_ptr, data:sub(offset+1))
+	local ptr = ffi.cast(type_ptr, string.sub(data, offset+1))
 	return ptr
 end
 
@@ -75,7 +76,7 @@ local function dump_strings(text)
 	repeat
 		local str = ffi.string(text + advance)
 		table.insert(strings, str)
-		advance = advance + str:len() + 1
+		advance = advance + string.len(str) + 1
 		print(str)
 	until advance >= header.num_text
 
@@ -83,7 +84,7 @@ local function dump_strings(text)
 end
 
 -- 'file' can be either a filename or IQM data (as long as the magic is intact)
-function iqm.load(file)
+function iqm.load(file, save_data, preserve_cw)
 	-- HACK: Workaround for a bug in LuaJIT's GC - we need to turn it off for the
 	-- rest of the function or we'll get a segfault shortly into these loops.
 	--
@@ -176,7 +177,7 @@ function iqm.load(file)
 		type = ct
 	end
 
-	local filedata = love.filesystem.newFileData(("\0"):rep(header.num_vertexes * ffi.sizeof(type)), "dummy")
+	local filedata = love.filesystem.newFileData(string.rep("\0", header.num_vertexes * ffi.sizeof(type)), "dummy")
 	local vertices = ffi.cast("struct " .. title .. "*", filedata:getPointer())
 
 	-- TODO: Compute XY + spherical radiuses
@@ -189,10 +190,6 @@ function iqm.load(file)
 			for j = 0, va.size-1 do
 				vertices[i][va.type][j] = ptr[i*va.size+j]
 			end
-			-- if va.type == "weight" then
-			-- 	local v = vertices[i][va.type]
-			-- 	print(v[0], v[1], v[2], v[3])
-			-- end
 			if va.type == "position" then
 				local v = vertices[i][va.type]
 				for i = 1, 3 do
@@ -215,10 +212,39 @@ function iqm.load(file)
 	-- Translate indices for love
 	local indices = {}
 	for _, triangle in ipairs(triangles) do
-		table.insert(indices, triangle.vertex[0] + 1)
-		-- IQM uses CW winding, but we want CCW. Reverse.
-		table.insert(indices, triangle.vertex[2] + 1)
-		table.insert(indices, triangle.vertex[1] + 1)
+		if preserve_cw then
+			table.insert(indices, triangle.vertex[0] + 1)
+			table.insert(indices, triangle.vertex[1] + 1)
+			table.insert(indices, triangle.vertex[2] + 1)
+		else
+			-- IQM uses CW winding, but we want CCW. Reverse.
+			table.insert(indices, triangle.vertex[0] + 1)
+			table.insert(indices, triangle.vertex[2] + 1)
+			table.insert(indices, triangle.vertex[1] + 1)
+		end
+	end
+
+	-- re-read the vertex data :(
+	local save_buffer = {}
+	if save_data then
+		local buffer = {}
+		for _, va in ipairs(found_types) do
+			local ptr = read_ptr(data, va.format, va.offset)
+			for i = 1, header.num_vertexes do
+				buffer[i] = buffer[i] or {}
+				buffer[i][va.type] = {}
+				for j = 0, va.size-1 do
+					buffer[i][va.type][j+1] = ptr[(i-1)*va.size+j]
+				end
+			end
+		end
+		for i, triangle in ipairs(triangles) do
+			save_buffer[i] = {
+				buffer[triangle.vertex[0] + 1],
+				buffer[triangle.vertex[2] + 1],
+				buffer[triangle.vertex[1] + 1]
+			}
+		end
 	end
 
 	local layout = {}
@@ -239,6 +265,7 @@ function iqm.load(file)
 	local objects = {}
 	objects.bounds = {}
 	objects.bounds.base = computed_bbox
+	objects.triangles = save_buffer
 
 	if header.ofs_bounds > 0 then
 		local bounds = read_offset(
@@ -266,6 +293,7 @@ function iqm.load(file)
 	objects.has_joints = header.ofs_joints > 0
 	objects.has_anims = header.ofs_anims > 0
 	objects.mesh = m
+	objects.meshes = {}
 	for i, mesh in ipairs(meshes) do
 		local add = {
 			first    = mesh.first_triangle * 3 + 1,
@@ -274,7 +302,13 @@ function iqm.load(file)
 			name     = ffi.string(text+mesh.name)
 		}
 		add.last = add.first + add.count
-		table.insert(objects, add)
+		table.insert(objects.meshes, add)
+	end
+
+	-- in exm, this is a json chunk
+	if header.num_comment == 1 then
+		local comments = read_ptr(data, "char", header.ofs_comment)
+		objects.metadata = ffi.string(comments)
 	end
 
 	collectgarbage("restart")
@@ -302,6 +336,14 @@ function iqm.load_anims(file)
 	if header.ofs_joints > 0 then
 		local skeleton     = {}
 		local joints       = read_offset(data, "struct iqmjoint", header.ofs_joints, header.num_joints)
+		
+		local joint_map    = {}
+		for i, joint in ipairs(joints) do
+			local name = ffi.string(text+joint.name)
+			joint_map[i], joint_map[name] = name, i
+		end
+		anims.joint_map = joint_map
+
 		for i, joint in ipairs(joints) do
 			joint.parent = joint.parent + 1
 			local bone = {
