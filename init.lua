@@ -3,7 +3,7 @@ local c    = require(base .. "iqm-ffi")
 local ffi  = require "ffi"
 
 local iqm = {
-	_LICENSE     = "Inter-Quake Model Loader is distributed under the terms of the MIT license. See LICENSE.md.",
+	_LICENSE     = "Inter-Quake Model Loader is distributed as public domain (Unlicense). See LICENSE.md for full text.",
 	_URL         = "https://github.com/excessive/iqm",
 	_VERSION     = "1.0.0",
 	_DESCRIPTION = "Load an IQM 3D model into LÖVE.",
