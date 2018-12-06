@@ -4,12 +4,18 @@ Depends on LÖVE 11
 
 Intended for use with [LÖVE3D](https://github.com/excessive/love3d), but does not depend on it (you can use this for 2D meshes, too!)
 
+## Blender Exporter
+
+The Blender exporter supports exporting .iqm and .exm formats. The .exm format is backwards compatible with .iqm, but has an additional metadata block with unspecified json in it (subject to change in future revisions).
+
+It is derived from [the IQM SDK](https://github.com/lsalzman/iqm) a few years ago before the license changed from public domain to MIT. This version has some quality of life improvements and new features as needed for Excessive's games.
+
 ## Usage:
 ```lua
 local iqm = require "iqm"
 
 -- load:
-local model = iqm.load("foo.iqm")
+local model = iqm.load("foo.exm")
 
 -- Make sure to enable mipmaps
 model.textures = {
@@ -28,7 +34,7 @@ end
 for _, buffer in ipairs(model) do
 	local texture = model.textures[buffer.material]
 	model.mesh:setTexture(texture)
-	model.mesh:setDrawRange(buffer.first, buffer.last)
+	model.mesh:setDrawRange(buffer.first, buffer.last - buffer.first)
 	love.graphics.draw(model.mesh)
 end
 ```
