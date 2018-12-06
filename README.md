@@ -1,4 +1,4 @@
-# Inter-Quake Model Loader
+# Inter-Quake Model + Excessive Model (.iqm/.exm) Loader
 
 Depends on LÖVE 11
 
