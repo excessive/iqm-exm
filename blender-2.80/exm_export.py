@@ -797,7 +797,7 @@ def collectAnims(context, armature, scale, bones):
 
     animspecs = []
 
-    fps = scene.render.fps * scene.render.fps_base
+    fps = scene.render.fps / scene.render.fps_base
 
     for track in armature.animation_data.nla_tracks:
         if track.mute:
