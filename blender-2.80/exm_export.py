@@ -788,18 +788,45 @@ def collectAnim(context, armature, scale, bones, action, startframe = None, endf
     return outdata
 
 
-def collectAnims(context, armature, scale, bones, animspecs):
+def collectAnims(context, armature, scale, bones):
     if not armature.animation_data:
         print('Armature has no animation data')
         return []
-    actions = bpy.data.actions
-    animspecs = [ spec.strip() for spec in animspecs.split(',') ]
-    anims = []
+
     scene = context.scene
+
+    animspecs = []
+
+    fps = scene.render.fps * scene.render.fps_base
+
+    for track in armature.animation_data.nla_tracks:
+        if track.mute:
+            continue
+
+        # only bother using first action on this track, until we can support
+        # exporting fully evaluated NLA animations (in the meantime: bake them)
+        for strip in track.strips:
+            if strip.mute:
+                continue
+
+            loop = False
+
+            if strip.repeat > 1.0 or strip.use_animated_time_cyclic:
+                loop = True
+
+            # todo: pose markers
+            action = strip.action
+            frame_start = action.frame_range[0]
+            frame_end = action.frame_range[1]
+            spec = [ action.name, frame_start, frame_end, fps * strip.scale, loop ]
+            animspecs.append(spec)
+            break
+
+    actions = bpy.data.actions
+    anims = []
     oldaction = armature.animation_data.action
     oldframe = scene.frame_current
     for animspec in animspecs:
-        animspec = [ arg.strip() for arg in animspec.split(':') ]
         animname = animspec[0]
         if animname not in actions:
             print('Action "%s" not found in current armature' % animname)
@@ -981,7 +1008,7 @@ def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False,
     return meshes
 
 
-def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True, usecol = False, animspecs = None, matfun = (lambda prefix, image: image), derigify = False, boneorder = None, flipyz = False, reversewinding = True, exm_meta = None, selected_only = False):
+def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True, usecol = False, matfun = (lambda prefix, image: image), derigify = False, boneorder = None, flipyz = False, reversewinding = True, exm_meta = None, selected_only = False):
     armature = findArmature(context, selected_only)
     if useskel and not armature:
         print('No armature selected')
@@ -1026,8 +1053,8 @@ def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True,
         meshes = collectMeshes(context, bones, scale, matfun, useskel, usecol, filetype, flipyz, reversewinding, selected_only)
     else:
         meshes = []
-    if useskel and animspecs:
-        anims = collectAnims(context, armature, scale, bonelist, animspecs)
+    if useskel:
+        anims = collectAnims(context, armature, scale, bonelist)
     else:
         anims = []
 
@@ -1177,8 +1204,6 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     bl_idname = "export.exm"
     bl_label = 'Export EXM'
     filename_ext = ".exm"
-    animspec = bpy.props.StringProperty(name="Animations", description="Animations to export (text block name)", maxlen=1024, default="")
-    # animspec = bpy.props.EnumProperty(items=bpy.data.texts, description="Animations to export")
     usemesh = bpy.props.BoolProperty(name="Meshes", description="Generate meshes", default=True)
     useskel = bpy.props.BoolProperty(name="Skeleton", description="Generate skeleton", default=False)
     usebbox = bpy.props.BoolProperty(name="Bounding boxes", description="Generate bounding boxes", default=True)
@@ -1187,6 +1212,8 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     # matfmt = bpy.props.EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="m")
     # derigify = bpy.props.BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
     boneorder = bpy.props.StringProperty(name="Bone order", description="Override ordering of bones", subtype="FILE_NAME", default="")
+
+    # please do not release files into the world with these options, it ruins expectations of how these files are oriented.
     # flipyz = bpy.props.BoolProperty(name="Flip Y and Z", description="Flip the Y and Z axes to adapt model for upwards Y oriented usage", default=False)
     # reversewinding = bpy.props.BoolProperty(name="Reverse Winding", description="Reverse face winding for Quake", default=True)
 
@@ -1197,14 +1224,11 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
         derigify = False
         flipyz = False
         reversewinding = True
-        spec = self.properties.animspec
         global_matrix = axis_conversion(to_up="Z", to_forward="Y").to_4x4()
         # exm_meta = ""
         exm_meta = getJSON(context, self.properties.filepath, global_matrix)
 
-        if spec:
-            spec = bpy.data.texts[spec].lines[0].body
-        exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.useskel, self.properties.usebbox, self.properties.usecol, spec, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
+        exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.useskel, self.properties.usebbox, self.properties.usecol, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
         return {'FINISHED'}
 
     def check(self, context):
