@@ -787,7 +787,8 @@ def collectAnim(context, armature, scale, bones, action, startframe = None, endf
         outdata.append(outframe)
     return outdata
 
-
+# TODO: make sure rest position is unset when going through frames, or it won't
+# work. There's also some bug with bones that don't inherit rotations.
 def collectAnims(context, armature, scale, bones):
     if not armature.animation_data:
         print('Armature has no animation data')
@@ -854,7 +855,7 @@ def collectAnims(context, armature, scale, bones):
     return anims
 
 
-def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False, filetype = 'EXM', flipyz = False, reversewinding = True, selected_only = False):
+def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = True, usecol = False, filetype = 'EXM', flipyz = False, reversewinding = True, selected_only = False):
     vertwarn = []
     scene = context.view_layer
     objs = [obj for obj in scene.objects if not obj.hide_viewport]
@@ -864,7 +865,10 @@ def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False,
     depsgraph = context.view_layer.depsgraph
     for obj in objs:
         if obj.type == 'MESH':
-            data = obj.to_mesh(depsgraph, True, calc_undeformed=True)
+            if usemodifiers:
+                data = obj.to_mesh(depsgraph, True, calc_undeformed=True)
+            else:
+                data = obj.to_mesh(depsgraph, False)
             data.calc_loop_triangles()
             data.calc_normals_split()
 
@@ -1008,7 +1012,7 @@ def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False,
     return meshes
 
 
-def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True, usecol = False, matfun = (lambda prefix, image: image), derigify = False, boneorder = None, flipyz = False, reversewinding = True, exm_meta = None, selected_only = False):
+def exportIQM(context, filename, usemesh = True, usemodifiers = True, useskel = True, usebbox = True, usecol = False, matfun = (lambda prefix, image: image), derigify = False, boneorder = None, flipyz = False, reversewinding = True, exm_meta = None, selected_only = False):
     armature = findArmature(context, selected_only)
     if useskel and not armature:
         print('No armature selected')
@@ -1050,7 +1054,7 @@ def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True,
 
     bonelist = sorted(bones.values(), key = lambda bone: bone.index)
     if usemesh:
-        meshes = collectMeshes(context, bones, scale, matfun, useskel, usecol, filetype, flipyz, reversewinding, selected_only)
+        meshes = collectMeshes(context, bones, scale, matfun, usemodifiers, useskel, usecol, filetype, flipyz, reversewinding, selected_only)
     else:
         meshes = []
     if useskel:
@@ -1204,20 +1208,20 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     bl_idname = "export.exm"
     bl_label = 'Export EXM'
     filename_ext = ".exm"
+    selected_only = bpy.props.BoolProperty(name="Only selected", description="Export only selected objects", default=False)
     usemesh = bpy.props.BoolProperty(name="Meshes", description="Generate meshes", default=True)
+    usemodifiers = bpy.props.BoolProperty(name="Apply Modifiers", description="Apply (non-deforming) modifiers such as Mirror and Subsurf", default=True)
     useskel = bpy.props.BoolProperty(name="Skeleton", description="Generate skeleton", default=False)
+    boneorder = bpy.props.StringProperty(name="Bone order", description="Override ordering of bones", subtype="FILE_NAME", default="")
     usebbox = bpy.props.BoolProperty(name="Bounding boxes", description="Generate bounding boxes", default=True)
     usecol = bpy.props.BoolProperty(name="Vertex colors", description="Export vertex colors", default=True)
     #usetrans = bpy.props.FloatVectorProperty(name="Translate", description="Translate position of exported model", step=50, precision=2, size=3)
     # matfmt = bpy.props.EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="m")
     # derigify = bpy.props.BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
-    boneorder = bpy.props.StringProperty(name="Bone order", description="Override ordering of bones", subtype="FILE_NAME", default="")
 
     # please do not release files into the world with these options, it ruins expectations of how these files are oriented.
     # flipyz = bpy.props.BoolProperty(name="Flip Y and Z", description="Flip the Y and Z axes to adapt model for upwards Y oriented usage", default=False)
     # reversewinding = bpy.props.BoolProperty(name="Reverse Winding", description="Reverse face winding for Quake", default=True)
-
-    selected_only = bpy.props.BoolProperty(name="Only selected", description="Export only selected objects", default=False)
 
     def execute(self, context):
         matfun = lambda prefix, image: prefix
@@ -1228,7 +1232,7 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
         # exm_meta = ""
         exm_meta = getJSON(context, self.properties.filepath, global_matrix)
 
-        exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.useskel, self.properties.usebbox, self.properties.usecol, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
+        exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.usemodifiers, self.properties.useskel, self.properties.usebbox, self.properties.usecol, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
         return {'FINISHED'}
 
     def check(self, context):
