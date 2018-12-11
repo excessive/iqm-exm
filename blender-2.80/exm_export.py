@@ -1054,7 +1054,19 @@ def exportIQM(context, filename, usemesh = True, usemodifiers = True, useskel = 
 
     bonelist = sorted(bones.values(), key = lambda bone: bone.index)
     if usemesh:
+        # HACK: workaround for https://developer.blender.org/T59162
+        # this is not needed when to_mesh works properly.
+        if armature:
+            oldpose = armature.data.pose_position
+            armature.data.pose_position = 'REST'
+            armature.data.update_tag()
+            context.scene.frame_set(context.scene.frame_current)
         meshes = collectMeshes(context, bones, scale, matfun, usemodifiers, useskel, usecol, filetype, flipyz, reversewinding, selected_only)
+
+        if armature:
+            armature.data.pose_position = oldpose
+            armature.data.update_tag()
+            context.scene.frame_set(context.scene.frame_current)
     else:
         meshes = []
     if useskel:
