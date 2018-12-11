@@ -1208,20 +1208,20 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     bl_idname = "export.exm"
     bl_label = 'Export EXM'
     filename_ext = ".exm"
-    selected_only = bpy.props.BoolProperty(name="Only selected", description="Export only selected objects", default=False)
-    usemesh = bpy.props.BoolProperty(name="Meshes", description="Generate meshes", default=True)
-    usemodifiers = bpy.props.BoolProperty(name="Apply Modifiers", description="Apply (non-deforming) modifiers such as Mirror and Subsurf", default=True)
-    useskel = bpy.props.BoolProperty(name="Skeleton", description="Generate skeleton", default=False)
-    boneorder = bpy.props.StringProperty(name="Bone order", description="Override ordering of bones", subtype="FILE_NAME", default="")
-    usebbox = bpy.props.BoolProperty(name="Bounding boxes", description="Generate bounding boxes", default=True)
-    usecol = bpy.props.BoolProperty(name="Vertex colors", description="Export vertex colors", default=True)
-    #usetrans = bpy.props.FloatVectorProperty(name="Translate", description="Translate position of exported model", step=50, precision=2, size=3)
-    # matfmt = bpy.props.EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="m")
-    # derigify = bpy.props.BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
+    selected_only: bpy.props.BoolProperty(name="Only selected", description="Export only selected objects", default=False)
+    usemesh: bpy.props.BoolProperty(name="Meshes", description="Generate meshes", default=True)
+    usemodifiers: bpy.props.BoolProperty(name="Apply Modifiers", description="Apply (non-deforming) modifiers such as Mirror and Subsurf", default=True)
+    useskel: bpy.props.BoolProperty(name="Skeleton", description="Generate skeleton", default=False)
+    boneorder: bpy.props.StringProperty(name="Bone order", description="Override ordering of bones", subtype="FILE_NAME", default="")
+    usebbox: bpy.props.BoolProperty(name="Bounding boxes", description="Generate bounding boxes", default=True)
+    usecol: bpy.props.BoolProperty(name="Vertex colors", description="Export vertex colors", default=True)
+    #usetrans: bpy.props.FloatVectorProperty(name="Translate", description="Translate position of exported model", step=50, precision=2, size=3)
+    # matfmt: bpy.props.EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="m")
+    # derigify: bpy.props.BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
 
     # please do not release files into the world with these options, it ruins expectations of how these files are oriented.
-    # flipyz = bpy.props.BoolProperty(name="Flip Y and Z", description="Flip the Y and Z axes to adapt model for upwards Y oriented usage", default=False)
-    # reversewinding = bpy.props.BoolProperty(name="Reverse Winding", description="Reverse face winding for Quake", default=True)
+    # flipyz: bpy.props.BoolProperty(name="Flip Y and Z", description="Flip the Y and Z axes to adapt model for upwards Y oriented usage", default=False)
+    # reversewinding: bpy.props.BoolProperty(name="Reverse Winding", description="Reverse face winding for Quake", default=True)
 
     def execute(self, context):
         matfun = lambda prefix, image: prefix
