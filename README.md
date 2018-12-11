@@ -1,8 +1,6 @@
 # Inter-Quake Model + Excessive Model (.iqm/.exm) Loader
 
-Depends on LÖVE 11
-
-Intended for use with [LÖVE3D](https://github.com/excessive/love3d), but does not depend on it (you can use this for 2D meshes, too!)
+Loader depends on LÖVE 11.x. Requires [CPML](https://github.com/excessive/cpml) for animation support, but not static meshes.
 
 ## Blender Exporter
 
