@@ -1,5 +1,17 @@
 # This script is licensed as public domain.
 
+# TODO
+# - option to ignore root bone motion (useful for animation)
+#   - maybe with a sub option for just ignore xy or all?
+# - keyframe baking options?
+# - selective animation export
+# - certain types of transforms don't work correctly, notably bones which don't
+#   inherit parts of parent transform (i.e. ignore parent rotation/etc)
+# - it'd be pretty handy to be able to export some material information in meta
+# - 16-bit vertex data is unsupported, but it'd be pretty useful to support
+#   exporting normalized s16/u16 data scaled to object bounds, this has plenty
+#   of precision for most use cases.
+
 bl_info = {
     "name": "Export Excessive Model (.exm/.iqm)",
     "author": "Lee Salzman, Colby Klein",
@@ -26,19 +38,19 @@ IQM_TANGENT      = 3
 IQM_BLENDINDEXES = 4
 IQM_BLENDWEIGHTS = 5
 IQM_COLOR        = 6
-IQM_CUSTOM       = 0x10
+# IQM_CUSTOM       = 0x10
 
-IQM_BYTE   = 0
+# IQM_BYTE   = 0
 IQM_UBYTE  = 1
-IQM_SHORT  = 2
-IQM_USHORT = 3
-IQM_INT    = 4
-IQM_UINT   = 5
-IQM_HALF   = 6
+# IQM_SHORT  = 2
+# IQM_USHORT = 3
+# IQM_INT    = 4
+# IQM_UINT   = 5
+# IQM_HALF   = 6
 IQM_FLOAT  = 7
-IQM_DOUBLE = 8
+# IQM_DOUBLE = 8
 
-IQM_LOOP = 1
+# IQM_LOOP = 1
 
 IQM_HEADER      = struct.Struct('<16s27I')
 IQM_MESH        = struct.Struct('<6I')
@@ -865,10 +877,7 @@ def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = 
     depsgraph = context.view_layer.depsgraph
     for obj in objs:
         if obj.type == 'MESH':
-            if usemodifiers:
-                data = obj.to_mesh(depsgraph, True, calc_undeformed=True)
-            else:
-                data = obj.to_mesh(depsgraph, False)
+            data = obj.to_mesh(depsgraph, usemodifiers)
             data.calc_loop_triangles()
             data.calc_normals_split()
 
@@ -1054,8 +1063,9 @@ def exportIQM(context, filename, usemesh = True, usemodifiers = True, useskel = 
 
     bonelist = sorted(bones.values(), key = lambda bone: bone.index)
     if usemesh:
-        # HACK: workaround for https://developer.blender.org/T59162
-        # this is not needed when to_mesh works properly.
+        # NB: to_mesh will export the posed mesh if we don't explicitly reset
+        # to rest pose. I filed a bug about it, but it turns out to just be how
+        # the API works.
         if armature:
             oldpose = armature.data.pose_position
             armature.data.pose_position = 'REST'
