@@ -774,6 +774,7 @@ def collectAnim(context, armature, scale, bones, action, startframe = None, endf
     worldmatrix = armature.matrix_world
     armature.animation_data.action = action
     outdata = []
+
     for time in range(startframe, endframe+1):
         scene.frame_set(time)
         pose = armature.pose
@@ -784,10 +785,19 @@ def collectAnim(context, armature, scale, bones, action, startframe = None, endf
                 posematrix = pose.bones[bone.parent.origname].matrix.inverted() @ posematrix
             else:
                 posematrix = worldmatrix @ posematrix
+
             if scale != 1.0:
                 posematrix.translation *= scale
+
             loc = posematrix.to_translation()
-            quat = posematrix.to_quaternion()
+
+            # make sure that non-uniform scaled matrices are converted to quat correctly.
+            # (same problem and solution as for a normal matrix)
+            poserot = posematrix.to_3x3()
+            poserot.invert()
+            poserot.transpose()
+
+            quat = poserot.to_quaternion()
             quat.normalize()
             if quat.w > 0:
                 quat.negate()
@@ -1251,8 +1261,8 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
         flipyz = False
         reversewinding = True
         global_matrix = axis_conversion(to_up="Z", to_forward="Y").to_4x4()
-        # exm_meta = ""
-        exm_meta = getJSON(context, self.properties.filepath, global_matrix)
+        exm_meta = ""
+        # exm_meta = getJSON(context, self.properties.filepath, global_matrix)
 
         exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.usemodifiers, self.properties.useskel, self.properties.usebbox, self.properties.usecol, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
         return {'FINISHED'}
