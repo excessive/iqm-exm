@@ -230,6 +230,20 @@ class Mesh:
         # print('%s: %d tris scheduled to %d' % (self.name, len(self.tris), len(trischedule)))
         self.tris = trischedule
 
+    def populate(self):
+        for v in self.verts:
+            if v:
+                v.index = -1
+
+        vertschedule = []
+        for tri in self.tris:
+            for v in tri:
+                if v.index < 0:
+                    v.index = len(vertschedule)
+                    vertschedule.append(v)
+
+        self.verts = vertschedule
+
     def meshData(self, iqm):
         return [ iqm.addText(self.name), iqm.addText(self.material), self.firstvert, len(self.verts), self.firsttri, len(self.tris) ]
 
@@ -877,7 +891,7 @@ def collectAnims(context, armature, scale, bones):
     return anims
 
 
-def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = True, usecol = False, filetype = 'EXM', flipyz = False, reversewinding = True, selected_only = False):
+def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = True, usecol = False, cacheopt = True, filetype = 'EXM', flipyz = False, reversewinding = True, selected_only = False):
     vertwarn = []
     scene = context.view_layer
     objs = [obj for obj in scene.objects if not obj.hide_viewport]
@@ -1024,14 +1038,17 @@ def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = 
                         mesh.tris.append((faceverts[0], faceverts[i-1], faceverts[i]))
 
     for mesh in meshes:
-        mesh.optimize()
+        if cacheopt:
+            mesh.optimize()
+        else:
+            mesh.populate()
         mesh.calcTangents()
         print('%s %s: generated %d triangles' % (mesh.name, mesh.material, len(mesh.tris)))
 
     return meshes
 
 
-def exportIQM(context, filename, usemesh = True, usemodifiers = True, useskel = True, usebbox = True, usecol = False, matfun = (lambda prefix, image: image), derigify = False, boneorder = None, flipyz = False, reversewinding = True, exm_meta = None, selected_only = False):
+def exportIQM(context, filename, usemesh = True, usemodifiers = True, useskel = True, usebbox = True, usecol = False, meshopt = True, matfun = (lambda prefix, image: image), derigify = False, boneorder = None, flipyz = False, reversewinding = True, exm_meta = None, selected_only = False):
     armature = findArmature(context, selected_only)
     if useskel and not armature:
         print('No armature selected')
@@ -1081,7 +1098,7 @@ def exportIQM(context, filename, usemesh = True, usemodifiers = True, useskel = 
             armature.data.pose_position = 'REST'
             armature.data.update_tag()
             context.scene.frame_set(context.scene.frame_current)
-        meshes = collectMeshes(context, bones, scale, matfun, usemodifiers, useskel, usecol, filetype, flipyz, reversewinding, selected_only)
+        meshes = collectMeshes(context, bones, scale, matfun, usemodifiers, useskel, usecol, meshopt, filetype, flipyz, reversewinding, selected_only)
 
         if armature:
             armature.data.pose_position = oldpose
@@ -1247,6 +1264,8 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     boneorder: bpy.props.StringProperty(name="Bone order", description="Override ordering of bones", subtype="FILE_NAME", default="")
     usebbox: bpy.props.BoolProperty(name="Bounding boxes", description="Generate bounding boxes", default=True)
     usecol: bpy.props.BoolProperty(name="Vertex colors", description="Export vertex colors", default=True)
+    meshopt: bpy.props.BoolProperty(name="Cache Optimize", description="Optimize mesh output for GPU vertex cache", default=True)
+
     #usetrans: bpy.props.FloatVectorProperty(name="Translate", description="Translate position of exported model", step=50, precision=2, size=3)
     # matfmt: bpy.props.EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="m")
     # derigify: bpy.props.BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
@@ -1264,7 +1283,7 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
         exm_meta = ""
         # exm_meta = getJSON(context, self.properties.filepath, global_matrix)
 
-        exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.usemodifiers, self.properties.useskel, self.properties.usebbox, self.properties.usecol, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
+        exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.usemodifiers, self.properties.useskel, self.properties.usebbox, self.properties.usecol, self.properties.meshopt, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
         return {'FINISHED'}
 
     def check(self, context):
