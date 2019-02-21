@@ -836,12 +836,11 @@ def collectAnims(context, armature, scale, bones):
 
     fps = scene.render.fps / scene.render.fps_base
 
+    # look in NLA tracks to find animations to export
     for track in armature.animation_data.nla_tracks:
         if track.mute:
             continue
 
-        # only bother using first action on this track, until we can support
-        # exporting fully evaluated NLA animations (in the meantime: bake them)
         for strip in track.strips:
             if strip.mute:
                 continue
@@ -857,7 +856,6 @@ def collectAnims(context, armature, scale, bones):
             frame_end = action.frame_range[1]
             spec = [ action.name, frame_start, frame_end, fps * strip.scale, loop ]
             animspecs.append(spec)
-            break
 
     actions = bpy.data.actions
     anims = []
