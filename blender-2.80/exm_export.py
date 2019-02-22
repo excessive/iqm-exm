@@ -1274,9 +1274,12 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
 
     def execute(self, context):
         matfun = lambda prefix, image: prefix
+
+        # Debugging options: do not use for production files.
         derigify = False
         flipyz = False
         reversewinding = True
+
         global_matrix = axis_conversion(to_up="Z", to_forward="Y").to_4x4()
         exm_meta = ""
         # exm_meta = getJSON(context, self.properties.filepath, global_matrix)
