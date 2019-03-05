@@ -35,7 +35,7 @@ end
 -- You can draw the whole model as one mesh (just don't set draw range), but
 -- if you draw this way you can assign a different shader/textures per-mesh.
 -- (naturally, at the expense of more draw calls - do what's best for you)
-for _, buffer in ipairs(model) do
+for _, buffer in ipairs(model.meshes) do
 	local texture = model.textures[buffer.material]
 	model.mesh:setTexture(texture)
 	model.mesh:setDrawRange(buffer.first, buffer.last - buffer.first)
