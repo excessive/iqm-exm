@@ -11,7 +11,7 @@ ffi.cdef([[
 
 typedef uint32_t uint;
 typedef uint8_t uchar;
-typedef uint8_t byte; // simplifies translation for LOVE.
+typedef uint8_t byte, ubyte; // simplifies translation for LOVE, LOVR.
 
 struct iqmheader
 {

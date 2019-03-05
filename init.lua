@@ -9,6 +9,10 @@ local iqm = {
 	_DESCRIPTION = "Load an IQM 3D model into LÖVE.",
 }
 
+local love = love or lovr
+love.filesystem.getInfo = love.filesystem.getInfo or lovr.filesystem.isFile
+love.filesystem.newFileData = love.filesystem.newFileData or lovr.data.newBlob
+
 iqm.lookup = {}
 
 local function check_magic(magic)
@@ -118,20 +122,20 @@ function iqm.load(file, save_data, preserve_cw)
 	local function translate_format(type)
 		local types = {
 			[c.IQM_FLOAT] = "float",
-			[c.IQM_UBYTE] = "byte",
+			[c.IQM_UBYTE] = lovr and "ubyte" or "byte",
 		}
 		return types[type] or false
 	end
 
 	local function translate_love(type)
 		local types = {
-			position = "VertexPosition",
-			texcoord = "VertexTexCoord",
-			normal   = "VertexNormal",
-			tangent  = "VertexTangent",
-			bone     = "VertexBone",
-			weight   = "VertexWeight",
-			color    = "VertexColor",
+			position = lovr and "lovrPosition" or "VertexPosition",
+			texcoord = lovr and "lovrTexCoord" or "VertexTexCoord",
+			normal   = lovr and "lovrNormal" or "VertexNormal",
+			tangent  = lovr and "lovrTangent" or "VertexTangent",
+			bone     = lovr and "lovrBones" or "VertexBone",
+			weight   = lovr and "lovrBoneWeights" or "VertexWeight",
+			color    = lovr and "lovrVertexColor" or "VertexColor",
 		}
 		return assert(types[type])
 	end
