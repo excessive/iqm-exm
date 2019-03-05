@@ -1,4 +1,4 @@
-local base = (...):gsub('%.init$', '') .. "."
+local base = (...):gsub('%.?init$', '') .. "."
 local c    = require(base .. "iqm-ffi")
 local ffi  = require "ffi"
 
