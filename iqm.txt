@@ -3,10 +3,11 @@
 // version 2: May 31, 2011
 //    * explicitly store quaternion w to minimize animation jitter
 //      modified joint and pose struct to explicitly store quaternion w in new channel 6 (with 10 total channels)
-// version 2 clarification (iqm-exm): Feb 21, 2019
+// version 2 clarification (iqm-exm): February 21, 2019, March 6, 2019
 //    * specify coordinate system as Z-up, X-east/right, Y-north/forward. this was already de-facto standard by the
 //      tools and exporters, but not written.
 //    * specify that triangle indices are clockwise
+//    * specify unit scale
 
 // all data is little endian
 
@@ -46,6 +47,7 @@ struct iqmmesh
 // however, it may support other format/size combinations for these types if it desires.
 // vertex positions use the same coordinate system as Blender, where:
 // X = right (east), Y = forward (north), Z = up.
+// 1 unit = 1 meter.
 enum // vertex array type
 {
     IQM_POSITION     = 0,  // float, 3
