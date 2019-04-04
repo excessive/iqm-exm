@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Export Excessive Model (.exm/.iqm)",
     "author": "Lee Salzman, Colby Klein",
-    "version": (2018, 12, 5),
+    "version": (2019, 4, 4),
     "blender": (2, 80, 0),
     "location": "File > Export > Excessive Model",
     "description": "Export to the Excessive Model format (.exm/.iqm)",
@@ -38,7 +38,12 @@ IQM_TANGENT      = 3
 IQM_BLENDINDEXES = 4
 IQM_BLENDWEIGHTS = 5
 IQM_COLOR        = 6
-# IQM_CUSTOM       = 0x10
+IQM_CUSTOM       = 0x10
+
+# NB: this is INTENTIONALLY UNDOCUMENTED AND UNFINISHED.
+# it's outside of spec, index subject to change! please give feedback on issue
+# #8 if you use this feature.
+EXM_TEXCOORD2    = IQM_CUSTOM + 0x10
 
 # IQM_BYTE   = 0
 IQM_UBYTE  = 1
@@ -64,11 +69,12 @@ IQM_BOUNDS      = struct.Struct('<8f')
 MAXVCACHE = 32
 
 class Vertex:
-    def __init__(self, index, coord, normal, uv, weights, color):
+    def __init__(self, index, coord, normal, uv, weights, color, uv2):
         self.index   = index
         self.coord   = coord
         self.normal  = normal
         self.uv      = uv
+        self.uv2     = uv2
         self.weights = weights
         self.color   = color
 
@@ -121,7 +127,7 @@ class Vertex:
         return self.index
 
     def __eq__(self, v):
-        return self.coord == v.coord and self.normal == v.normal and self.uv == v.uv and self.weights == v.weights and self.color == v.color
+        return self.coord == v.coord and self.normal == v.normal and self.uv == v.uv and self.weights == v.weights and self.color == v.color and self.uv2 == v.uv2
 
 
 class Mesh:
@@ -507,9 +513,13 @@ class IQMFile:
             file.write(IQM_VERTEXARRAY.pack(IQM_BLENDWEIGHTS, 0, IQM_UBYTE, 4, offset))
             offset += self.numverts * struct.calcsize('<4B')
         hascolors = any(mesh.verts and mesh.verts[0].color for mesh in self.meshes)
+        hasuv2 = any(mesh.verts and mesh.verts[0].uv2 for mesh in self.meshes)
         if hascolors:
             file.write(IQM_VERTEXARRAY.pack(IQM_COLOR, 0, IQM_UBYTE, 4, offset))
             offset += self.numverts * struct.calcsize('<4B')
+        if hasuv2:
+            file.write(IQM_VERTEXARRAY.pack(EXM_TEXCOORD2, 0, IQM_FLOAT, 2, offset))
+            offset += self.numverts * struct.calcsize('<2f')
 
         for mesh in self.meshes:
             for v in mesh.verts:
@@ -537,6 +547,13 @@ class IQMFile:
                         file.write(struct.pack('<4B', v.color[0], v.color[1], v.color[2], v.color[3]))
                     else:
                         file.write(struct.pack('<4B', 0, 0, 0, 255))
+        if hasuv2:
+            for mesh in self.meshes:
+                for v in mesh.verts:
+                    if v.uv2:
+                        file.write(struct.pack('<2f', *v.uv2))
+                    else:
+                        file.write(struct.pack('<2f', 0, 0))
 
     def calcNeighbors(self):
         edges = {}
@@ -598,6 +615,9 @@ class IQMFile:
             hascolors = any(mesh.verts and mesh.verts[0].color for mesh in self.meshes)
             if hascolors:
                 num_vertexarrays += 1
+            hasuv2 = any(mesh.verts and mesh.verts[0].uv2 for mesh in self.meshes)
+            if hasuv2:
+                num_vertexarrays += 1
             self.filesize += num_vertexarrays * IQM_VERTEXARRAY.size
             ofs_vdata = self.filesize
             self.filesize += self.numverts * struct.calcsize('<3f2f3f4f')
@@ -605,6 +625,8 @@ class IQMFile:
                 self.filesize += self.numverts * struct.calcsize('<4B4B')
             if hascolors:
                 self.filesize += self.numverts * struct.calcsize('<4B')
+            if hasuv2:
+                self.filesize += self.numverts * struct.calcsize('<2f')
         else:
             ofs_vertexarrays = 0
             num_vertexarrays = 0
@@ -917,9 +939,13 @@ def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = 
             groups = obj.vertex_groups
 
             uvfaces = None
+            lightuvfaces = None
             for uv_layer in data.uv_layers:
                 if uv_layer.active:
                     uvfaces = uv_layer.data
+                else:
+                    lightuvfaces = uv_layer.data
+                if uvfaces and lightuvfaces:
                     break
 
             colors = None
@@ -979,6 +1005,12 @@ def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = 
                     else:
                         vertuv = mathutils.Vector((0.0, 0.0))
 
+                    # flip V axis of texture space
+                    vertuv2 = None
+                    if lightuvfaces:
+                        uv = lightuvfaces[loop_index].uv
+                        vertuv2 = mathutils.Vector((uv[0], 1.0 - uv[1]))
+
                     if colors:
                         vertcol = colors[loop_index].color
                         vertcol = (int(round(vertcol[0] * 255.0)), int(round(vertcol[1] * 255.0)), int(round(vertcol[2] * 255.0)), 255)
@@ -1004,13 +1036,13 @@ def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = 
 
                     if not tri.use_smooth:
                         vertindex = len(verts)
-                        vertkey = Vertex(vertindex, vertco, vertno, vertuv, vertweights, vertcol)
+                        vertkey = Vertex(vertindex, vertco, vertno, vertuv, vertweights, vertcol, vertuv2)
                         vertkey.normalizeWeights()
                         mesh.verts.append(vertkey)
                         faceverts.append(vertkey)
                         continue
 
-                    vertkey = Vertex(v.index, vertco, vertno, vertuv, vertweights, vertcol)
+                    vertkey = Vertex(v.index, vertco, vertno, vertuv, vertweights, vertcol, vertuv2)
                     vertkey.normalizeWeights()
                     if not verts[v.index]:
                         verts[v.index] = vertkey
@@ -1282,6 +1314,7 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
 
         global_matrix = axis_conversion(to_up="Z", to_forward="Y").to_4x4()
         exm_meta = ""
+        # disabled in git due to unspecified nature.
         # exm_meta = getJSON(context, self.properties.filepath, global_matrix)
 
         exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.usemodifiers, self.properties.useskel, self.properties.usebbox, self.properties.usecol, self.properties.meshopt, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
