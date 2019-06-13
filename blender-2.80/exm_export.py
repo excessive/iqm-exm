@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Export Excessive Model (.exm/.iqm)",
     "author": "Lee Salzman, Colby Klein",
-    "version": (2019, 4, 4),
+    "version": (2019, 6, 12),
     "blender": (2, 80, 0),
     "location": "File > Export > Excessive Model",
     "description": "Export to the Excessive Model format (.exm/.iqm)",
@@ -918,10 +918,13 @@ def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = 
     if selected_only:
         objs = context.selected_objects
     meshes = []
-    depsgraph = context.view_layer.depsgraph
+    depsgraph = context.evaluated_depsgraph_get()
     for obj in objs:
         if obj.type == 'MESH':
-            data = obj.to_mesh(depsgraph, usemodifiers)
+            obj.update_from_editmode()
+            if usemodifiers:
+                obj = obj.evaluated_get(depsgraph)
+            data = obj.to_mesh(depsgraph=depsgraph, preserve_all_data_layers=True)
             data.calc_loop_triangles()
             data.calc_normals_split()
 
@@ -1067,6 +1070,8 @@ def collectMeshes(context, bones, scale, matfun, usemodifiers = True, useskel = 
                     else:
                         mesh.tris.append((faceverts[0], faceverts[i-1], faceverts[i]))
 
+            obj.to_mesh_clear()
+
     for mesh in meshes:
         if cacheopt:
             mesh.optimize()
@@ -1209,13 +1214,13 @@ def getJSON(context,
     for obj_orig in objects_empty:
         obj = obj_orig.copy()
         if obj_orig.data: obj.data = obj_orig.data.copy()
-        scene.objects.link(obj)
+        bpy.context.scene.collection.objects.link(obj)
         obj.select_set(True)
         scene.objects.active = obj
 
         obj_matrix_orig = global_matrix @ obj_orig.matrix_world
 
-        obj_size = obj.empty_draw_size
+        obj_size = obj.empty_display_size
         obj_scale = obj_matrix_orig.to_scale()
         bpy.ops.object.transform_apply(scale=True, location=False, rotation=False)
 
@@ -1224,18 +1229,18 @@ def getJSON(context,
 
         objdata = {
             "name": obj.name,
-            "type": obj.empty_draw_type,
+            "type": obj.empty_display_type,
             "transform_without_scale": serialize_matrix4(obj_matrix),
             "transform": serialize_matrix4(obj_matrix_orig),
             "position": serialize_vector3(obj_matrix.to_translation()),
             "size": serialize_vector3(size_vector),
-            "properties": {k:v for k,v in obj.items()[1:]},
+            # "properties": {k:v for k,v in obj.items()[1:]},
         }
 
-        if obj.empty_draw_type in ["SPHERE","CUBE","CIRCLE"]:
+        if obj.empty_display_type in ["SPHERE","CUBE","CIRCLE"]:
             list_to_add_to = "trigger_areas"
 
-            if "CUBE" == obj.empty_draw_type:
+            if "CUBE" == obj.empty_display_type:
                 has_rotation = Quaternion((1, 0, 0, 0)) != obj_matrix.to_quaternion()
 
                 objdata["type"] = "OOBB" if has_rotation else "AABB"
@@ -1244,6 +1249,7 @@ def getJSON(context,
             list_to_add_to = "objects"
 
         json_out[list_to_add_to].append(objdata)
+        bpy.context.scene.collection.objects.unlink(obj)
         bpy.ops.object.delete()
 
     for o in objects_curve:
@@ -1314,7 +1320,8 @@ class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
 
         global_matrix = axis_conversion(to_up="Z", to_forward="Y").to_4x4()
         exm_meta = ""
-        # disabled in git due to unspecified nature.
+        # disabled in git because it's liable to change at any time.
+        # feel free to use it, but at your own risk!
         # exm_meta = getJSON(context, self.properties.filepath, global_matrix)
 
         exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.usemodifiers, self.properties.useskel, self.properties.usebbox, self.properties.usecol, self.properties.meshopt, matfun, derigify, self.properties.boneorder, flipyz, reversewinding, exm_meta, self.properties.selected_only)
