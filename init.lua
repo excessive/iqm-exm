@@ -1,4 +1,4 @@
-local base = (...):gsub('%.init$', '') .. "."
+local base = (...):gsub('%.?init$', '') .. "."
 local c    = require(base .. "iqm-ffi")
 local ffi  = require "ffi"
 
@@ -8,6 +8,10 @@ local iqm = {
 	_VERSION     = "1.0.0",
 	_DESCRIPTION = "Load an IQM 3D model into LÖVE.",
 }
+
+local love = love or lovr
+love.filesystem.getInfo = love.filesystem.getInfo or lovr.filesystem.isFile
+love.data.newByteData = love.data.newByteData or lovr.data.newBlob
 
 iqm.lookup = {}
 
@@ -118,20 +122,20 @@ function iqm.load(file, save_data, preserve_cw)
 	local function translate_format(type)
 		local types = {
 			[c.IQM_FLOAT] = "float",
-			[c.IQM_UBYTE] = "byte",
+			[c.IQM_UBYTE] = lovr and "ubyte" or "byte",
 		}
 		return types[type] or false
 	end
 
 	local function translate_love(type)
 		local types = {
-			position = "VertexPosition",
-			texcoord = "VertexTexCoord",
-			normal   = "VertexNormal",
-			tangent  = "VertexTangent",
-			bone     = "VertexBone",
-			weight   = "VertexWeight",
-			color    = "VertexColor",
+			position = lovr and "lovrPosition" or "VertexPosition",
+			texcoord = lovr and "lovrTexCoord" or "VertexTexCoord",
+			normal   = lovr and "lovrNormal" or "VertexNormal",
+			tangent  = lovr and "lovrTangent" or "VertexTangent",
+			bone     = lovr and "lovrBones" or "VertexBone",
+			weight   = lovr and "lovrBoneWeights" or "VertexWeight",
+			color    = lovr and "lovrVertexColor" or "VertexColor",
 		}
 		return assert(types[type])
 	end
@@ -177,8 +181,8 @@ function iqm.load(file, save_data, preserve_cw)
 		type = ct
 	end
 
-	local filedata = love.filesystem.newFileData(string.rep("\0", header.num_vertexes * ffi.sizeof(type)), "dummy")
-	local vertices = ffi.cast("struct " .. title .. "*", filedata:getPointer())
+	local blob = love.data.newByteData(header.num_vertexes * ffi.sizeof(type))
+	local vertices = ffi.cast("struct " .. title .. "*", blob:getPointer())
 
 	-- TODO: Compute XY + spherical radiuses
 	local computed_bbox = { min = {}, max = {} }
@@ -252,7 +256,7 @@ function iqm.load(file, save_data, preserve_cw)
 		layout[i] = { va.love_type, va.format, va.size }
 	end
 
-	local m = love.graphics.newMesh(layout, filedata, "triangles")
+	local m = love.graphics.newMesh(layout, blob, "triangles")
 	m:setVertexMap(indices)
 
 	-- Decode mesh/material names.
