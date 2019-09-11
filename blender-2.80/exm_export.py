@@ -1203,10 +1203,12 @@ def getJSON(context,
 
     objects_empty = [obj for obj in objects if not obj.hide_viewport and "EMPTY" == obj.type]
     objects_curve = [obj for obj in objects if not obj.hide_viewport and "CURVE" == obj.type]
+    objects_light = [obj for obj in objects if not obj.hide_viewport and "LIGHT" == obj.type]
 
     json_out = {
         "objects": [],
         "paths": [],
+        "lights": [],
         "trigger_areas": [],
     }
 
@@ -1249,6 +1251,41 @@ def getJSON(context,
             list_to_add_to = "objects"
 
         json_out[list_to_add_to].append(objdata)
+        bpy.context.scene.collection.objects.unlink(obj)
+        bpy.ops.object.delete()
+
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj_orig in objects_light:
+        obj = obj_orig.copy()
+        if obj_orig.data: obj.data = obj_orig.data.copy()
+        bpy.context.scene.collection.objects.link(obj)
+        obj.select_set(True)
+        scene.objects.active = obj
+
+        obj_matrix_orig = global_matrix @ obj_orig.matrix_world
+
+        obj_size = obj.empty_display_size
+        obj_scale = obj_matrix_orig.to_scale()
+        bpy.ops.object.transform_apply(scale=True, location=False, rotation=False)
+
+        obj_matrix = global_matrix @ obj.matrix_world
+        size_vector = obj_size * obj_scale
+
+        objdata = {
+            "name": obj.name,
+            "type": obj.data.type,
+            "transform": serialize_matrix4(obj_matrix),
+            "position": serialize_vector3(obj_matrix.to_translation()),
+            "color": [ obj.data.color[0], obj.data.color[1], obj.data.color[2] ],
+            "specular": obj.data.specular_factor,
+            "power": obj.data.energy,
+        }
+
+        if obj.data.type == 'SPOT':
+            objdata["angle"] = obj.data.spot_size
+            objdata["blend"] = obj.data.spot_blend
+
+        json_out["lights"].append(objdata)
         bpy.context.scene.collection.objects.unlink(obj)
         bpy.ops.object.delete()
 
