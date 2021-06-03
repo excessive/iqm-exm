@@ -1208,6 +1208,7 @@ def getJSON(context,
     json_out = {
         "objects": [],
         "paths": [],
+        "decals": [],
         "lights": [],
         "trigger_areas": [],
     }
@@ -1246,7 +1247,14 @@ def getJSON(context,
                 has_rotation = Quaternion((1, 0, 0, 0)) != obj_matrix.to_quaternion()
 
                 objdata["type"] = "OOBB" if has_rotation else "AABB"
-
+        elif obj.empty_display_type == 'IMAGE':
+            offset = mathutils.Matrix.Translation((0.0, 0.0, -1.0))
+            scale = mathutils.Matrix.Diagonal((0.5 * obj_size, 0.5 * obj_size, 0.5 * obj_size, 1.0))
+            local = scale @ offset
+            mat = obj_matrix_orig @ local
+            mat.invert()
+            objdata["transform"] = serialize_matrix4(mat)
+            list_to_add_to = "decals"
         else:
             list_to_add_to = "objects"
 
