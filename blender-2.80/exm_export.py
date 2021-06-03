@@ -1248,8 +1248,11 @@ def getJSON(context,
 
                 objdata["type"] = "OOBB" if has_rotation else "AABB"
         elif obj.empty_display_type == 'IMAGE':
+            aspect = 1
+            if obj.data != None:
+                aspect = obj.data.size[0] / obj.data.size[1]
             offset = mathutils.Matrix.Translation((0.0, 0.0, -1.0))
-            scale = mathutils.Matrix.Diagonal((0.5 * obj_size, 0.5 * obj_size, 0.5 * obj_size, 1.0))
+            scale = mathutils.Matrix.Diagonal((0.5 * obj_size * aspect, 0.5 * obj_size, 0.5 * obj_size, 1.0))
             local = scale @ offset
             mat = obj_matrix_orig @ local
             mat.invert()
