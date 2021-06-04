@@ -1240,6 +1240,9 @@ def getJSON(context,
             # "properties": {k:v for k,v in obj.items()[1:]},
         }
 
+        if obj.instance_type == "COLLECTION":
+            objdata["instance"] = obj.instance_collection.name
+
         if obj.empty_display_type in ["SPHERE","CUBE","CIRCLE"]:
             list_to_add_to = "trigger_areas"
 
@@ -1334,7 +1337,8 @@ def getJSON(context,
     scene.objects.active = initial_active_object
     # context.view_layer.objects.active = initial_active_object
 
-    return json.dumps(json_out, sort_keys=True, indent=4, separators=(',', ': '))
+    # return json.dumps(json_out, sort_keys=True, indent=4, separators=(',', ': '))
+    return json.dumps(json_out, separators=(',', ':'))
 
 class ExportEXM(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     '''Export an Excessive Model EXM or IQM file'''
