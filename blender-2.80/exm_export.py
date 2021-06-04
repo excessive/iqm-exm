@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Export Excessive Model (.exm/.iqm)",
     "author": "Lee Salzman, Colby Klein",
-    "version": (2019, 6, 12),
+    "version": (2021, 6, 3),
     "blender": (2, 80, 0),
     "location": "File > Export > Excessive Model",
     "description": "Export to the Excessive Model format (.exm/.iqm)",
